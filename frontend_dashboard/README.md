@@ -57,6 +57,10 @@ The mock renderer visually mimics a map canvas with:
 - accessible markers with status rings and hover tooltips (name, speed, ETA)
 - lightweight clustering when users are very close
 
+### Demo behavior note
+
+In Mock mode, the demo defaults to a **world map viewport** and seeds **globally distributed mock users** (across multiple regions). The map will auto-fit to include all current users.
+
 ## Notes
 
 - The map is intentionally implemented as a swap-friendly placeholder component (`src/components/MapContainer.js`).

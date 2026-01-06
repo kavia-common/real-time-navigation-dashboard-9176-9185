@@ -31,30 +31,36 @@ function normalizeUsersBounds(markers) {
 }
 
 function zoomToScale(zoom) {
-  // "Google-ish": zoom 10..16 feels like street-level. Keep scale modest but noticeable.
-  const z = typeof zoom === "number" ? zoom : 12;
-  const t = clamp((z - 10) / 6, 0, 1); // 0..1 for [10..16]
-  return 1 + t * 1.2; // 1..2.2
+  // Support a "world" view as well as street-level.
+  // We keep transforms modest so panning/zooming stays smooth.
+  const z = typeof zoom === "number" ? zoom : 3;
+
+  // Base scale at zoom=3 is ~1. Increase gradually; cap to avoid huge DOM scaling.
+  const t = clamp((z - 3) / 10, 0, 1); // 0..1 for [3..13]
+  return 1 + t * 1.25; // 1..2.25
 }
 
 function scaleToZoom(scale) {
-  const s = clamp(scale, 0.8, 3);
-  const t = (s - 1) / 1.2;
-  return Math.round(10 + clamp(t, 0, 1) * 6);
+  const s = clamp(scale, 0.75, 3);
+  const t = (s - 1) / 1.25;
+  return Math.round(3 + clamp(t, 0, 1) * 10);
 }
 
 function computeMockBounds(center, zoom, viewportPx) {
   // Heuristic: span shrinks as zoom increases; aspect preserved by viewport.
-  const z = typeof zoom === "number" ? zoom : 12;
+  // We tune it so zoom ~2-3 shows most of the world; zoom ~10-14 is city-level.
+  const z = typeof zoom === "number" ? zoom : 3;
   const h = Math.max(200, viewportPx?.h || 600);
   const w = Math.max(200, viewportPx?.w || 800);
 
-  const baseLatSpan = 0.45; // at zoom ~10
-  const baseLngSpan = 0.62;
+  // At zoom=3 we show a large portion of the globe.
+  const baseLatSpan = 170; // degrees
+  const baseLngSpan = 330; // degrees (wider than lat)
 
-  const factor = Math.pow(0.82, z - 10); // zoom in -> smaller span
-  const latSpan = clamp(baseLatSpan * factor, 0.008, 2.2);
-  const lngSpan = clamp(baseLngSpan * factor * (w / h), 0.008, 3.2);
+  // Each zoom step reduces the span significantly (similar "feel" to web maps).
+  const factor = Math.pow(0.62, z - 3);
+  const latSpan = clamp(baseLatSpan * factor, 0.05, 180);
+  const lngSpan = clamp(baseLngSpan * factor * (w / h), 0.05, 360);
 
   return {
     minLat: center.lat - latSpan / 2,
@@ -94,9 +100,18 @@ function clusterKeyForCell(x01, y01, cell) {
 }
 
 function computeClusters(markersWithXY, zoom) {
-  // Simple clustering: at low zoom, cluster more aggressively.
-  const z = typeof zoom === "number" ? zoom : 12;
-  const cell = z <= 11 ? 0.06 : z <= 13 ? 0.045 : 0.032;
+  // Simple clustering: at world zoom, cluster more aggressively; decluster as you zoom in.
+  const z = typeof zoom === "number" ? zoom : 3;
+
+  // Bigger cell => more clustering. Keep "single" markers dominant by z~8+.
+  const cell =
+    z <= 3 ? 0.22 :
+    z <= 4 ? 0.18 :
+    z <= 5 ? 0.14 :
+    z <= 6 ? 0.10 :
+    z <= 7 ? 0.075 :
+    z <= 9 ? 0.055 :
+    0.038;
 
   const buckets = new Map();
   for (const m of markersWithXY) {
@@ -165,7 +180,7 @@ export function MockGoogleMap({
 
   // Internal visual state. We keep props as source of truth, but can still render smoothly.
   const [internalCenter, setInternalCenter] = useState(center || { lat: 0, lng: 0 });
-  const [internalZoom, setInternalZoom] = useState(typeof zoom === "number" ? zoom : 12);
+  const [internalZoom, setInternalZoom] = useState(typeof zoom === "number" ? zoom : 3);
 
   // Track panning: CSS transform on a tile-layer for smoothness.
   const [panPx, setPanPx] = useState({ x: 0, y: 0 });
@@ -255,7 +270,7 @@ export function MockGoogleMap({
 
   const zoomBy = useCallback(
     (delta) => {
-      const nextZoom = clamp((typeof internalZoom === "number" ? internalZoom : 12) + delta, 9, 17);
+      const nextZoom = clamp((typeof internalZoom === "number" ? internalZoom : 3) + delta, 2, 16);
       setInternalZoom(nextZoom);
     },
     [internalZoom]
@@ -438,7 +453,7 @@ export function MockGoogleMap({
                   e.stopPropagation();
                   // Zoom in and center on cluster
                   panToLatLng(unproject01ToLatLng(c.x01, c.y01, effectiveBounds));
-                  setInternalZoom((z) => clamp(z + 1, 9, 17));
+                  setInternalZoom((z) => clamp(z + 1, 2, 16));
                 }}
               >
                 <span className="MockMapClusterCount" aria-hidden="true">

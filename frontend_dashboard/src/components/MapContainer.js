@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { GoogleMap, MarkerF, useJsApiLoader } from "@react-google-maps/api";
 import { useDashboard } from "../store/dashboardStore";
 import { getGoogleMapsKey } from "../utils/env";
@@ -32,18 +32,22 @@ function makeDotIconSvgHex(hex) {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
-function computeBounds(users) {
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function computeBoundsFromUsers(users) {
   if (!users.length) {
     return { minLat: 0, maxLat: 1, minLng: 0, maxLng: 1 };
   }
   const lats = users.map((u) => u.lat);
   const lngs = users.map((u) => u.lng);
-  const padLat = 0.01;
-  const padLng = 0.01;
-  const minLat = Math.min(...lats) - padLat;
-  const maxLat = Math.max(...lats) + padLat;
-  const minLng = Math.min(...lngs) - padLng;
-  const maxLng = Math.max(...lngs) + padLng;
+
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+
   return { minLat, maxLat, minLng, maxLng };
 }
 
@@ -54,20 +58,49 @@ function getCenterFromBounds(bounds) {
   };
 }
 
-function estimateZoomFromBounds(bounds) {
-  // Lightweight heuristic for a pleasant default. (We avoid calling google.maps.* here
-  // so the component still renders fine in mock/no-network environments.)
+function estimateWorldZoomFromBounds(bounds) {
+  // Span-based heuristic tuned for world scale:
+  // - very large spans => zoomed out (2-3)
+  // - smaller spans => zoom in gradually
   const latSpan = Math.max(0.0001, Math.abs(bounds.maxLat - bounds.minLat));
   const lngSpan = Math.max(0.0001, Math.abs(bounds.maxLng - bounds.minLng));
   const span = Math.max(latSpan, lngSpan);
-  if (span > 3) return 6;
-  if (span > 1.5) return 7;
-  if (span > 0.75) return 8;
-  if (span > 0.35) return 9;
-  if (span > 0.18) return 10;
-  if (span > 0.09) return 11;
-  if (span > 0.045) return 12;
+
+  if (span > 220) return 2;
+  if (span > 160) return 3;
+  if (span > 110) return 4;
+  if (span > 70) return 5;
+  if (span > 45) return 6;
+  if (span > 25) return 7;
+  if (span > 14) return 8;
+  if (span > 7) return 9;
+  if (span > 3) return 10;
+  if (span > 1.5) return 11;
+  if (span > 0.75) return 12;
   return 13;
+}
+
+function computeFitCenterZoom(users) {
+  // World default: show all continents when there are no users.
+  if (!users.length) return { center: { lat: 15, lng: 0 }, zoom: 2 };
+
+  const b = computeBoundsFromUsers(users);
+
+  // Add a bit of padding so markers aren't on the edge. Clamp to plausible world bounds.
+  const padLat = 6;
+  const padLng = 10;
+
+  const padded = {
+    minLat: clamp(b.minLat - padLat, -85, 85),
+    maxLat: clamp(b.maxLat + padLat, -85, 85),
+    minLng: clamp(b.minLng - padLng, -180, 180),
+    maxLng: clamp(b.maxLng + padLng, -180, 180),
+  };
+
+  return {
+    center: getCenterFromBounds(padded),
+    zoom: clamp(estimateWorldZoomFromBounds(padded), 2, 14),
+  };
 }
 
 // PUBLIC_INTERFACE
@@ -93,22 +126,25 @@ export function MapProvider({ enabled, apiKey, children }) {
 }
 
 function GoogleMapView({ users }) {
-  const bounds = useMemo(() => computeBounds(users), [users]);
-  const center = useMemo(() => getCenterFromBounds(bounds), [bounds]);
-  const zoom = useMemo(() => estimateZoomFromBounds(bounds), [bounds]);
-
-  // Keep a stable map instance so we can pan without re-creating.
+  // Keep a stable map instance so we can fit bounds / pan without re-creating.
   const mapRef = useRef(null);
 
-  // If markers move, keep the map gently centered on the overall fleet.
+  // Fit bounds on mount and whenever user set changes.
   useEffect(() => {
     if (!mapRef.current) return;
-    try {
-      mapRef.current.panTo(center);
-    } catch {
-      // ignore
+    if (!window.google?.maps) return;
+    if (!users.length) {
+      mapRef.current.setCenter({ lat: 15, lng: 0 });
+      mapRef.current.setZoom(2);
+      return;
     }
-  }, [center]);
+
+    const bounds = new window.google.maps.LatLngBounds();
+    for (const u of users) bounds.extend({ lat: u.lat, lng: u.lng });
+
+    // Padding keeps markers away from the edges at world zoom.
+    mapRef.current.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
+  }, [users]);
 
   const mapOptions = useMemo(() => {
     return {
@@ -122,12 +158,15 @@ function GoogleMapView({ users }) {
     };
   }, []);
 
+  // Provide a safe initial world view while Google computes fitBounds.
+  const initial = useMemo(() => computeFitCenterZoom(users), [users]);
+
   return (
     <div className="MapViewport" role="region" aria-label="Google map">
       <GoogleMap
         mapContainerStyle={{ width: "100%", height: "100%" }}
-        center={center}
-        zoom={zoom}
+        center={initial.center}
+        zoom={initial.zoom}
         options={mapOptions}
         onLoad={(map) => {
           mapRef.current = map;
@@ -169,9 +208,13 @@ export function MapContainer() {
   const { users, mode, mapMode } = useDashboard();
   const apiKey = getGoogleMapsKey();
 
-  const bounds = useMemo(() => computeBounds(users), [users]);
-  const center = useMemo(() => getCenterFromBounds(bounds), [bounds]);
-  const zoom = useMemo(() => estimateZoomFromBounds(bounds), [bounds]);
+  // We keep a local "fit" center/zoom for the mock map so we can auto-frame the fleet
+  // on mount and when the user set changes.
+  const [fitView, setFitView] = useState(() => computeFitCenterZoom(users));
+
+  useEffect(() => {
+    setFitView(computeFitCenterZoom(users));
+  }, [users]);
 
   // Rendering rules:
   // - Demo forces mock, even if key exists.
@@ -197,8 +240,8 @@ export function MapContainer() {
         if (googleEnabled && loadError) {
           return (
             <MockGoogleMap
-              center={center}
-              zoom={zoom}
+              center={fitView.center}
+              zoom={fitView.zoom}
               markers={markers}
               onMarkerClick={() => {}}
             />
@@ -211,8 +254,8 @@ export function MapContainer() {
         // Mock always available (no external calls).
         return (
           <MockGoogleMap
-            center={center}
-            zoom={zoom}
+            center={fitView.center}
+            zoom={fitView.zoom}
             markers={markers}
             onMarkerClick={() => {}}
           />
