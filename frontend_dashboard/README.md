@@ -55,6 +55,8 @@ The mock renderer visually mimics a map canvas with:
 - subtle grid/tiles + compass hint
 - smooth pan/zoom (drag, scroll, +/- keys)
 - accessible markers with status rings and hover tooltips (name, speed, ETA)
+- **more noticeable** mock movement (slightly larger drift) with **smooth marker tweening**
+- subtle **pulse** + **trail** effect (respects `prefers-reduced-motion`)
 - lightweight clustering when users are very close
 
 ### Demo behavior note

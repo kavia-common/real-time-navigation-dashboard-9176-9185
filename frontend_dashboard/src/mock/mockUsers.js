@@ -100,8 +100,9 @@ const REGIONS = [
   },
 ];
 
-// A gentle per-tick drift (degrees). Chosen so users visibly move without teleporting.
-const DRIFT_DEGREES = 0.08;
+// A gentle per-tick drift (degrees). Slightly increased so movement is more noticeable
+// while still staying within the user's assigned region (no continent-hopping).
+const DRIFT_DEGREES = 0.12;
 
 // PUBLIC_INTERFACE
 export function createMockUsers() {

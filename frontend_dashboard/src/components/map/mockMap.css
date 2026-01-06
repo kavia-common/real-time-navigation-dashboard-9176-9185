@@ -213,7 +213,19 @@
   place-items: center;
 
   transition: transform 160ms ease, box-shadow 160ms ease;
-  animation: MockMarkerIn 220ms ease-out both;
+  animation: MockMarkerIn 220ms ease-out both, MockMarkerPulse 1800ms ease-in-out infinite;
+}
+
+@keyframes MockMarkerPulse {
+  0% {
+    box-shadow: var(--shadow-md);
+  }
+  55% {
+    box-shadow: var(--shadow-lg);
+  }
+  100% {
+    box-shadow: var(--shadow-md);
+  }
 }
 
 @keyframes MockMarkerIn {
@@ -234,6 +246,20 @@
   border-radius: 999px;
   border: 2px solid var(--ringColor, var(--color-primary));
   opacity: 0.85;
+}
+
+/* Subtle trailing marker hint (visual only); stays within theme */
+.MockMapMarkerTrail {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  transform: translate(-50%, -50%) translate3d(0, 0, 0);
+  background: color-mix(in srgb, var(--ringColor, var(--color-primary)) 30%, rgba(255, 255, 255, 0.92));
+  opacity: 0.28;
+  filter: blur(0.2px);
 }
 
 .MockMapMarker:hover {
@@ -368,4 +394,10 @@
 
 .MockMapMarker:hover .MockMapMarkerHoverLabel {
   opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .MockMapMarker {
+    animation: MockMarkerIn 220ms ease-out both;
+  }
 }

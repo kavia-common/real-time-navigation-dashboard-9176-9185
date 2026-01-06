@@ -40,12 +40,6 @@ function zoomToScale(zoom) {
   return 1 + t * 1.25; // 1..2.25
 }
 
-function scaleToZoom(scale) {
-  const s = clamp(scale, 0.75, 3);
-  const t = (s - 1) / 1.25;
-  return Math.round(3 + clamp(t, 0, 1) * 10);
-}
-
 function computeMockBounds(center, zoom, viewportPx) {
   // Heuristic: span shrinks as zoom increases; aspect preserved by viewport.
   // We tune it so zoom ~2-3 shows most of the world; zoom ~10-14 is city-level.
@@ -163,6 +157,118 @@ function applyOverlapOffsets(clusters) {
   return out.map((c) => ({ ...c, x01: clamp(c.x01 + c.ox, 0, 1), y01: clamp(c.y01 + c.oy, 0, 1) }));
 }
 
+/**
+ * Smoothly tween per-marker positions to increase perceived motion without teleporting.
+ * This is intentionally lightweight (no deps) and only uses rAF while targets differ.
+ */
+function useMarkerTween(targets, { durationMs = 520 } = {}) {
+  const rafRef = useRef(null);
+  const stateRef = useRef(new Map()); // id -> { x, y, tx, ty, startX, startY, startTs }
+  const [renderTick, setRenderTick] = useState(0);
+
+  const targetsKey = useMemo(() => {
+    // Keep stable ordering so useEffect can diff cheaply.
+    return (targets || []).map((t) => `${t.id}:${t.x01.toFixed(4)}:${t.y01.toFixed(4)}`).join("|");
+  }, [targets]);
+
+  useEffect(() => {
+    const m = stateRef.current;
+    const now = performance.now();
+
+    // Mark new targets / update existing targets.
+    for (const t of targets || []) {
+      const existing = m.get(t.id);
+      if (!existing) {
+        m.set(t.id, {
+          x: t.x01,
+          y: t.y01,
+          tx: t.x01,
+          ty: t.y01,
+          startX: t.x01,
+          startY: t.y01,
+          startTs: now,
+          changedAt: now,
+        });
+        continue;
+      }
+
+      // Update target and restart tween if moved meaningfully.
+      const moved = Math.abs(existing.tx - t.x01) + Math.abs(existing.ty - t.y01) > 0.0001;
+      if (moved) {
+        m.set(t.id, {
+          ...existing,
+          tx: t.x01,
+          ty: t.y01,
+          startX: existing.x,
+          startY: existing.y,
+          startTs: now,
+          changedAt: now,
+        });
+      }
+    }
+
+    // Remove stale ids.
+    const ids = new Set((targets || []).map((t) => t.id));
+    for (const id of m.keys()) {
+      if (!ids.has(id)) m.delete(id);
+    }
+
+    // rAF loop only while something is animating.
+    const step = (ts) => {
+      let anyAnimating = false;
+      for (const [id, s] of m.entries()) {
+        const t = clamp((ts - s.startTs) / durationMs, 0, 1);
+        // easeInOutCubic for slightly more "dynamic" movement.
+        const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+        const nx = s.startX + (s.tx - s.startX) * eased;
+        const ny = s.startY + (s.ty - s.startY) * eased;
+
+        // Keep for rendering.
+        m.set(id, { ...s, x: nx, y: ny });
+
+        if (t < 1) anyAnimating = true;
+      }
+
+      setRenderTick((k) => (k + 1) % 1000000);
+
+      if (anyAnimating) {
+        rafRef.current = window.requestAnimationFrame(step);
+      } else {
+        rafRef.current = null;
+      }
+    };
+
+    if (!rafRef.current) {
+      rafRef.current = window.requestAnimationFrame(step);
+    }
+
+    return () => {
+      // Intentionally do not cancel here on every targetsKey change; we want continuity.
+      // Cleanup handled on unmount below.
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetsKey, durationMs]);
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) window.cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+  }, []);
+
+  const positions = useMemo(() => {
+    const out = new Map();
+    for (const [id, s] of stateRef.current.entries()) {
+      out.set(id, { x01: s.x, y01: s.y, changedAt: s.changedAt || 0 });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renderTick]);
+
+  return positions;
+}
+
 // PUBLIC_INTERFACE
 export function MockGoogleMap({
   center,
@@ -179,8 +285,8 @@ export function MockGoogleMap({
   const [viewportPx, setViewportPx] = useState({ w: 0, h: 0 });
 
   // Internal visual state. We keep props as source of truth, but can still render smoothly.
-  const [internalCenter, setInternalCenter] = useState(center || { lat: 0, lng: 0 });
-  const [internalZoom, setInternalZoom] = useState(typeof zoom === "number" ? zoom : 3);
+  const [internalCenter, setInternalCenter] = useState(center || { lat: 15, lng: 0 });
+  const [internalZoom, setInternalZoom] = useState(typeof zoom === "number" ? zoom : 2);
 
   // Track panning: CSS transform on a tile-layer for smoothness.
   const [panPx, setPanPx] = useState({ x: 0, y: 0 });
@@ -259,6 +365,15 @@ export function MockGoogleMap({
     return applyOverlapOffsets(raw);
   }, [internalZoom, markersWithXY]);
 
+  // Tween single marker positions (clusters still render at their computed positions).
+  const markerTargets = useMemo(() => {
+    return clusters
+      .filter((c) => c.type === "single")
+      .map((c) => ({ id: c.items[0].id, x01: c.x01, y01: c.y01 }));
+  }, [clusters]);
+
+  const tweened = useMarkerTween(markerTargets, { durationMs: 560 });
+
   const panToLatLng = useCallback(
     (nextCenter) => {
       // Reset visual pan offset and update center.
@@ -296,17 +411,20 @@ export function MockGoogleMap({
     setInternalCenter(nextCenter);
   }, [effectiveBounds, panPx.x, panPx.y]);
 
-  const onPointerDown = useCallback((e) => {
-    // Only start drag when interacting with map canvas, not controls.
-    if (e.button !== 0) return;
-    draggingRef.current = {
-      active: true,
-      startX: e.clientX,
-      startY: e.clientY,
-      startPanX: panPx.x,
-      startPanY: panPx.y,
-    };
-  }, [panPx.x, panPx.y]);
+  const onPointerDown = useCallback(
+    (e) => {
+      // Only start drag when interacting with map canvas, not controls.
+      if (e.button !== 0) return;
+      draggingRef.current = {
+        active: true,
+        startX: e.clientX,
+        startY: e.clientY,
+        startPanX: panPx.x,
+        startPanY: panPx.y,
+      };
+    },
+    [panPx.x, panPx.y]
+  );
 
   const onPointerMove = useCallback((e) => {
     if (!draggingRef.current.active) return;
@@ -434,13 +552,25 @@ export function MockGoogleMap({
         }}
       >
         {clusters.map((c) => {
-          const left = `${c.x01 * 100}%`;
-          const top = `${c.y01 * 100}%`;
+          // Tween only singles for better motion visibility; clusters stay at computed center.
+          let x01 = c.x01;
+          let y01 = c.y01;
+
+          if (c.type === "single") {
+            const id = c.items[0].id;
+            const pos = tweened.get(id);
+            if (pos) {
+              x01 = pos.x01;
+              y01 = pos.y01;
+            }
+          }
+
+          const left = `${x01 * 100}%`;
+          const top = `${y01 * 100}%`;
 
           if (c.type === "cluster") {
             const count = c.items.length;
-            const title =
-              count === 1 ? c.items[0].name : `${count} users nearby (click to zoom)`;
+            const title = count === 1 ? c.items[0].name : `${count} users nearby (click to zoom)`;
 
             return (
               <button
@@ -492,6 +622,9 @@ export function MockGoogleMap({
                 }
               }}
             >
+              {/* Subtle trailing "ghost" dot; visual only */}
+              <span className="MockMapMarkerTrail" aria-hidden="true" />
+
               <span className="MockMapMarkerAvatar" aria-hidden="true">
                 {initials}
               </span>
