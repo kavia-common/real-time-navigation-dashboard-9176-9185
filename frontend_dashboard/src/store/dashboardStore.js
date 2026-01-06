@@ -60,6 +60,11 @@ export function DashboardProvider({ children }) {
   const [statusFilter, setStatusFilter] = useState(DEFAULT_FILTER);
   const [toasts, setToasts] = useState([]);
 
+  // Explicit map renderer override:
+  // - "auto": Google when key present AND mode is live; otherwise mock
+  // - "demo": always mock (even if key exists)
+  const [mapMode, setMapMode] = useState("auto"); // "auto" | "demo"
+
   const wsRef = useRef(null);
   const mockTimerRef = useRef(null);
 
@@ -217,13 +222,16 @@ export function DashboardProvider({ children }) {
       sortBy,
       statusFilter,
       toasts,
+      mapMode,
 
       actions: {
         setSortBy,
         setStatusFilter,
         setMode,
+        setMapMode,
         connectWs,
         startMock,
+        pushToast,
       },
     };
   }, [
@@ -232,6 +240,7 @@ export function DashboardProvider({ children }) {
     connectionState,
     filteredSortedUsers,
     lastError,
+    mapMode,
     mode,
     sortBy,
     startMock,
@@ -239,6 +248,7 @@ export function DashboardProvider({ children }) {
     toasts,
     users,
     wsUrl,
+    pushToast,
   ]);
 
   return <DashboardContext.Provider value={value}>{children}</DashboardContext.Provider>;

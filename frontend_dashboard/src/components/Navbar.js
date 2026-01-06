@@ -2,10 +2,25 @@ import React, { useEffect, useMemo, useRef } from "react";
 import { useDashboard } from "../store/dashboardStore";
 import { getGoogleMapsKey } from "../utils/env";
 
+function getMapBadgeLabel({ mapMode, mode, hasKey }) {
+  if (mapMode === "demo") return "Map: Demo (Mock)";
+  if (hasKey && mode === "live") return "Map: Google";
+  return "Map: Mock (No Key)";
+}
+
 // PUBLIC_INTERFACE
 export function Navbar() {
   /** Top navigation bar with app title, connection status, and mode toggles. */
-  const { mode, wsUrl, connectionState, lastError, sortBy, statusFilter, actions } = useDashboard();
+  const {
+    mode,
+    wsUrl,
+    connectionState,
+    lastError,
+    sortBy,
+    statusFilter,
+    mapMode,
+    actions,
+  } = useDashboard();
 
   const banner = useMemo(() => {
     if (mode === "mock") {
@@ -23,28 +38,18 @@ export function Navbar() {
     return { cls: "Banner", label: "Idle", detail: "Not connected" };
   }, [connectionState, lastError, mode]);
 
-  const mapRenderer = useMemo(() => {
-    const hasKey = Boolean(getGoogleMapsKey());
-    // We only use Google renderer when key exists and mode is live; otherwise mock.
-    return hasKey && mode === "live" ? "Google" : "Mock";
-  }, [mode]);
+  const hasKey = useMemo(() => Boolean(getGoogleMapsKey()), [mode, mapMode]);
+  const mapBadge = useMemo(() => getMapBadgeLabel({ mapMode, mode, hasKey }), [hasKey, mapMode, mode]);
 
-  // Toast when the map renderer switches (e.g., toggling mode, or adding/removing key).
-  const prevRendererRef = useRef(mapRenderer);
+  // Toast when the effective map mode changes.
+  const prevBadgeRef = useRef(mapBadge);
   useEffect(() => {
-    const prev = prevRendererRef.current;
-    if (prev !== mapRenderer) {
-      prevRendererRef.current = mapRenderer;
-      if (mapRenderer === "Google") {
-        actions.startMock(); // ensure mock timers aren't running (safe no-op if already live)
-        actions.connectWs(); // keep behavior consistent with live mode intent
-        // Note: the store already emits its own toasts for connection; this is just for map layer.
-        // We avoid adding a new global toast API; use existing mode toasts.
-      }
-      // Reuse existing toast mechanism by nudging mode (no change) would be messy.
-      // Instead, we rely on existing mode toasts and provide a visual indicator.
+    const prev = prevBadgeRef.current;
+    if (prev !== mapBadge) {
+      prevBadgeRef.current = mapBadge;
+      actions.pushToast("Map mode changed", mapBadge);
     }
-  }, [actions, mapRenderer]);
+  }, [actions, mapBadge]);
 
   return (
     <header className="Navbar" role="banner">
@@ -67,8 +72,18 @@ export function Navbar() {
           </span>
 
           <span className="Pill" aria-label="Map provider indicator" title="Map renderer selection">
-            Map: <strong style={{ color: "var(--color-text)" }}>{mapRenderer}</strong>
+            <strong style={{ color: "var(--color-text)" }}>{mapBadge}</strong>
           </span>
+
+          <button
+            type="button"
+            className="Button"
+            onClick={() => actions.setMapMode(mapMode === "demo" ? "auto" : "demo")}
+            aria-label="Toggle demo map mode"
+            title="Demo forces the mock map renderer even if Google Maps key is configured"
+          >
+            Demo: {mapMode === "demo" ? "On" : "Off"}
+          </button>
 
           <select
             className="Select"

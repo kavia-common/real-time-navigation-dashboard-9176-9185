@@ -12,3 +12,9 @@ test("renders without Google Maps key (mock fallback)", () => {
   render(<App />);
   expect(screen.getByText(/Live Map/i)).toBeInTheDocument();
 });
+
+test("renders demo (mock) map mode badge without crashing", () => {
+  render(<App />);
+  // Default is auto; without a key this will show Mock (No Key).
+  expect(screen.getByText(/Map:\s*Mock \(No Key\)/i)).toBeInTheDocument();
+});

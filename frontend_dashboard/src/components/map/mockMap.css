@@ -1,0 +1,371 @@
+/* Ocean Professional - Mock Google Map renderer
+   - Fully self-contained: no external assets/APIs
+   - High-DPI friendly backgrounds (gradients + subtle grids)
+*/
+
+.MockMapViewport {
+  position: relative;
+  width: 100%;
+  height: calc(100vh - 60px - (2 * var(--space-4)) - 8px);
+  min-height: 420px;
+
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+
+  background: radial-gradient(circle at 20% 10%, rgba(37, 99, 235, 0.10), rgba(255, 255, 255, 0.88));
+  box-shadow: var(--shadow-md);
+  user-select: none;
+  touch-action: none;
+}
+
+@media (max-width: 980px) {
+  .MockMapViewport {
+    height: 420px;
+  }
+}
+
+.MockMapViewport:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-md), var(--focus-ring);
+}
+
+.MockMapAttribution {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 5;
+
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.70);
+  box-shadow: var(--shadow-sm);
+
+  font-size: 12px;
+  color: var(--color-text-muted);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.MockMapControls {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 6;
+
+  display: grid;
+  gap: 8px;
+  justify-items: stretch;
+}
+
+.MockMapControlBtn {
+  width: 44px;
+  height: 44px;
+
+  border-radius: 14px;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+
+  font-weight: 900;
+  font-size: 18px;
+  color: var(--color-text);
+
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.MockMapControlBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-border-strong);
+}
+
+.MockMapControlBtn:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+.MockMapControlBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-sm), var(--focus-ring);
+}
+
+.MockMapZoomReadout {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--color-text-muted);
+
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: var(--shadow-sm);
+}
+
+.MockMapCompass {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 6;
+
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(10px);
+
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.MockMapCompassArrow {
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 16px solid rgba(37, 99, 235, 0.9);
+  transform: translateY(-4px);
+  filter: drop-shadow(0 4px 6px rgba(17, 24, 39, 0.15));
+}
+
+.MockMapCompassLabel {
+  font-size: 11px;
+  font-weight: 900;
+  color: var(--color-text-muted);
+  transform: translateY(-2px);
+}
+
+.MockMapTiles {
+  position: absolute;
+  inset: -24%;
+  z-index: 1;
+
+  will-change: transform;
+  transition: transform 120ms ease;
+}
+
+.MockMapTileGrid {
+  position: absolute;
+  inset: 0;
+
+  background-image:
+    linear-gradient(to right, rgba(17, 24, 39, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(17, 24, 39, 0.06) 1px, transparent 1px),
+    radial-gradient(circle at 30% 20%, rgba(37, 99, 235, 0.08), transparent 55%),
+    radial-gradient(circle at 70% 65%, rgba(245, 158, 11, 0.08), transparent 50%);
+  background-size: 48px 48px, 48px 48px, 680px 520px, 720px 560px;
+  background-position: 0 0, 0 0, 0 0, 0 0;
+
+  opacity: 0.9;
+}
+
+.MockMapTileAccents {
+  position: absolute;
+  inset: 0;
+
+  /* Faux "roads" */
+  background-image:
+    linear-gradient(115deg, rgba(17, 24, 39, 0.07) 0px, rgba(17, 24, 39, 0.07) 2px, transparent 2px),
+    linear-gradient(25deg, rgba(17, 24, 39, 0.06) 0px, rgba(17, 24, 39, 0.06) 2px, transparent 2px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.10) 0px, rgba(37, 99, 235, 0.10) 3px, transparent 3px);
+  background-size: 260px 260px, 320px 320px, 520px 520px;
+  background-position: 0 0, 60px 40px, 120px 140px;
+  opacity: 0.55;
+  mix-blend-mode: multiply;
+}
+
+.MockMapMarkerLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+
+  will-change: transform;
+  transition: transform 120ms ease;
+}
+
+.MockMapMarker,
+.MockMapCluster {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+
+  border: none;
+  background: none;
+  padding: 0;
+}
+
+.MockMapMarker {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow-md);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+
+  display: grid;
+  place-items: center;
+
+  transition: transform 160ms ease, box-shadow 160ms ease;
+  animation: MockMarkerIn 220ms ease-out both;
+}
+
+@keyframes MockMarkerIn {
+  from {
+    transform: translate(-50%, -50%) scale(0.86);
+    opacity: 0.0;
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+.MockMapMarker::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 999px;
+  border: 2px solid var(--ringColor, var(--color-primary));
+  opacity: 0.85;
+}
+
+.MockMapMarker:hover {
+  transform: translate(-50%, -50%) scale(1.07);
+  box-shadow: var(--shadow-lg);
+}
+
+.MockMapMarker:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-md), var(--focus-ring);
+}
+
+.MockMapMarkerAvatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 14px;
+  background: var(--avatarBg, rgba(37, 99, 235, 0.14));
+  border: 1px solid rgba(17, 24, 39, 0.12);
+
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  color: rgba(11, 18, 32, 0.92);
+  text-transform: uppercase;
+}
+
+.MockMapCluster {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+
+  background: rgba(37, 99, 235, 0.90);
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow-md);
+
+  display: grid;
+  place-items: center;
+
+  transition: transform 160ms ease, box-shadow 160ms ease;
+  animation: MockMarkerIn 220ms ease-out both;
+}
+
+.MockMapCluster:hover {
+  transform: translate(-50%, -50%) scale(1.06);
+  box-shadow: var(--shadow-lg);
+}
+
+.MockMapCluster:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-md), var(--focus-ring);
+}
+
+.MockMapClusterCount {
+  font-weight: 900;
+  font-size: 13px;
+  color: white;
+}
+
+.MockMapMarkerTooltip {
+  /* Rich tooltip: appears on hover/focus (CSS only) */
+  position: absolute;
+  left: 50%;
+  top: -10px;
+  transform: translate(-50%, -100%);
+  width: 220px;
+
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow-lg);
+  color: var(--color-text);
+
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.MockMapMarkerTooltipTitle {
+  display: block;
+  font-weight: 900;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.MockMapMarkerTooltipRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 6px;
+}
+
+.MockMapMarkerTooltipRow strong {
+  color: var(--color-text);
+  font-weight: 800;
+}
+
+.MockMapMarker:hover .MockMapMarkerTooltip,
+.MockMapMarker:focus-visible .MockMapMarkerTooltip {
+  opacity: 1;
+  transform: translate(-50%, -104%);
+}
+
+.MockMapMarkerHoverLabel {
+  /* Tiny tooltip-like label used as a subtle hint (kept minimal). */
+  position: absolute;
+  left: 50%;
+  top: 52px;
+  transform: translateX(-50%);
+
+  white-space: nowrap;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  padding: 6px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text-muted);
+  font-size: 12px;
+
+  opacity: 0;
+  transition: opacity 140ms ease;
+  pointer-events: none;
+}
+
+.MockMapMarker:hover .MockMapMarkerHoverLabel {
+  opacity: 1;
+}

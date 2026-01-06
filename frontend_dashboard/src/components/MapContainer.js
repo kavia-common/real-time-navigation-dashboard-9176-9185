@@ -1,12 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { GoogleMap, MarkerF, useJsApiLoader } from "@react-google-maps/api";
 import { useDashboard } from "../store/dashboardStore";
 import { getGoogleMapsKey } from "../utils/env";
-import { UserMarker } from "./UserMarker";
-
-function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
-}
+import { MockGoogleMap } from "./map/MockGoogleMap";
 
 function statusToThemeColor(status) {
   // Match StatusBadge mapping:
@@ -96,77 +92,6 @@ export function MapProvider({ enabled, apiKey, children }) {
   return children({ isLoaded, loadError });
 }
 
-function MockMap({ users }) {
-  // Minimal placeholder "zoom/pan" state (purely visual scaling/offset)
-  const [zoom, setZoom] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-
-  const bounds = useMemo(() => computeBounds(users), [users]);
-
-  const project = (lat, lng) => {
-    const { minLat, maxLat, minLng, maxLng } = bounds;
-    const x01 = (lng - minLng) / (maxLng - minLng || 1);
-    const y01 = 1 - (lat - minLat) / (maxLat - minLat || 1);
-    return { x01: clamp(x01, 0, 1), y01: clamp(y01, 0, 1) };
-  };
-
-  const handleWheel = (e) => {
-    e.preventDefault();
-    const next = clamp(zoom + (e.deltaY < 0 ? 0.08 : -0.08), 0.85, 1.6);
-    setZoom(next);
-  };
-
-  const nudge = (dx, dy) => {
-    setOffset((p) => ({ x: clamp(p.x + dx, -80, 80), y: clamp(p.y + dy, -80, 80) }));
-  };
-
-  return (
-    <div
-      className="MapViewport"
-      role="region"
-      aria-label="Interactive map placeholder"
-      onWheel={handleWheel}
-      tabIndex={0}
-      onKeyDown={(e) => {
-        // Keyboard nudge for accessibility
-        if (e.key === "ArrowLeft") nudge(-10, 0);
-        if (e.key === "ArrowRight") nudge(10, 0);
-        if (e.key === "ArrowUp") nudge(0, -10);
-        if (e.key === "ArrowDown") nudge(0, 10);
-        if (e.key === "+" || e.key === "=") setZoom((z) => clamp(z + 0.08, 0.85, 1.6));
-        if (e.key === "-") setZoom((z) => clamp(z - 0.08, 0.85, 1.6));
-      }}
-      style={{
-        outline: "none",
-      }}
-    >
-      <div className="MapGrid" aria-hidden="true" />
-
-      <div className="MapOverlayTop" aria-hidden="true">
-        <div className="MapOverlayChip">Scroll to zoom • Arrow keys to pan</div>
-        <div className="MapOverlayChip">
-          Zoom: <strong style={{ color: "var(--color-text)" }}>{zoom.toFixed(2)}×</strong>
-        </div>
-      </div>
-
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-          transformOrigin: "center center",
-          transition: "transform 120ms ease",
-        }}
-      >
-        {users.map((u) => {
-          const { x01, y01 } = project(u.lat, u.lng);
-          return <UserMarker key={u.id} user={u} x01={x01} y01={y01} />;
-        })}
-      </div>
-    </div>
-  );
-}
-
 function GoogleMapView({ users }) {
   const bounds = useMemo(() => computeBounds(users), [users]);
   const center = useMemo(() => getCenterFromBounds(bounds), [bounds]);
@@ -222,12 +147,8 @@ function GoogleMapView({ users }) {
               title={u.name}
               icon={{
                 url: iconUrl,
-                scaledSize: window.google?.maps
-                  ? new window.google.maps.Size(34, 34)
-                  : undefined,
-                anchor: window.google?.maps
-                  ? new window.google.maps.Point(17, 17)
-                  : undefined,
+                scaledSize: window.google?.maps ? new window.google.maps.Size(34, 34) : undefined,
+                anchor: window.google?.maps ? new window.google.maps.Point(17, 17) : undefined,
               }}
             />
           );
@@ -244,26 +165,58 @@ function GoogleMapView({ users }) {
 
 // PUBLIC_INTERFACE
 export function MapContainer() {
-  /** Map renderer that swaps between mock placeholder and Google Maps depending on mode and key. */
-  const { users, mode } = useDashboard();
+  /** Map renderer that swaps between mock map and Google Maps depending on demo toggle, mode, and key. */
+  const { users, mode, mapMode } = useDashboard();
   const apiKey = getGoogleMapsKey();
 
-  // Use Google Maps only when:
-  // - mode is live, AND
-  // - key is configured
-  const googleEnabled = Boolean(apiKey) && mode === "live";
+  const bounds = useMemo(() => computeBounds(users), [users]);
+  const center = useMemo(() => getCenterFromBounds(bounds), [bounds]);
+  const zoom = useMemo(() => estimateZoomFromBounds(bounds), [bounds]);
+
+  // Rendering rules:
+  // - Demo forces mock, even if key exists.
+  // - Otherwise, use Google only when key exists AND mode is live.
+  const demoForced = mapMode === "demo";
+  const googleEnabled = !demoForced && Boolean(apiKey) && mode === "live";
+
+  const markers = useMemo(() => {
+    return users.map((u) => ({
+      id: u.id,
+      lat: u.lat,
+      lng: u.lng,
+      name: u.name,
+      status: u.status,
+      speed: u.speed,
+      etaIso: u.etaIso,
+    }));
+  }, [users]);
 
   return (
     <MapProvider enabled={googleEnabled} apiKey={apiKey}>
       {({ isLoaded, loadError }) => {
         if (googleEnabled && loadError) {
-          // Google failed to load; keep app functional by rendering mock instead.
-          return <MockMap users={users} />;
+          return (
+            <MockGoogleMap
+              center={center}
+              zoom={zoom}
+              markers={markers}
+              onMarkerClick={() => {}}
+            />
+          );
         }
         if (googleEnabled && isLoaded) {
           return <GoogleMapView users={users} />;
         }
-        return <MockMap users={users} />;
+
+        // Mock always available (no external calls).
+        return (
+          <MockGoogleMap
+            center={center}
+            zoom={zoom}
+            markers={markers}
+            onMarkerClick={() => {}}
+          />
+        );
       }}
     </MapProvider>
   );

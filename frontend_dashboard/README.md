@@ -45,6 +45,18 @@ Use the **Mode** toggle in the top bar:
 
 Use **Refresh** to reconnect/restart updates.
 
+## Demo map mode (Mock Google Map)
+
+Use the **Demo** toggle in the top bar:
+- Demo: On — forces the **Mock Google Map** renderer (no external APIs), even if a Google Maps key is configured.
+- Demo: Off — returns to **Auto** behavior (Google when `REACT_APP_GOOGLE_MAPS_API_KEY` is set and Mode is Live; otherwise Mock).
+
+The mock renderer visually mimics a map canvas with:
+- subtle grid/tiles + compass hint
+- smooth pan/zoom (drag, scroll, +/- keys)
+- accessible markers with status rings and hover tooltips (name, speed, ETA)
+- lightweight clustering when users are very close
+
 ## Notes
 
 - The map is intentionally implemented as a swap-friendly placeholder component (`src/components/MapContainer.js`).
