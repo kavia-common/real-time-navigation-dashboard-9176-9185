@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GoogleMap, MarkerF, useJsApiLoader } from "@react-google-maps/api";
 import { useDashboard } from "../store/dashboardStore";
 import { getGoogleMapsKey } from "../utils/env";
+import { getAreaLabel } from "../utils/geoRegion";
 import { MockGoogleMap } from "./map/MockGoogleMap";
 
 function statusToThemeColor(status) {
@@ -14,8 +15,7 @@ function statusToThemeColor(status) {
 }
 
 function makeDotIconSvgHex(hex) {
-  // Slightly elevated dot marker with a white ring, tuned for the Ocean Professional theme.
-  // Using inline SVG avoids any extra assets.
+  // Slightly elevated dot marker with a white ring.
   const svg = `
   <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34">
     <defs>
@@ -59,9 +59,7 @@ function getCenterFromBounds(bounds) {
 }
 
 function estimateWorldZoomFromBounds(bounds) {
-  // Span-based heuristic tuned for world scale:
-  // - very large spans => zoomed out (2-3)
-  // - smaller spans => zoom in gradually
+  // Span-based heuristic tuned for world scale.
   const latSpan = Math.max(0.0001, Math.abs(bounds.maxLat - bounds.minLat));
   const lngSpan = Math.max(0.0001, Math.abs(bounds.maxLng - bounds.minLng));
   const span = Math.max(latSpan, lngSpan);
@@ -86,7 +84,7 @@ function computeFitCenterZoom(users) {
 
   const b = computeBoundsFromUsers(users);
 
-  // Add a bit of padding so markers aren't on the edge. Clamp to plausible world bounds.
+  // Add padding so markers aren't on the edge. Clamp to plausible world bounds.
   const padLat = 6;
   const padLng = 10;
 
@@ -103,6 +101,13 @@ function computeFitCenterZoom(users) {
   };
 }
 
+function computeLabelKey(users) {
+  // Round to reduce churn while users drift; good enough for ~city/country level labeling.
+  return (users || [])
+    .map((u) => `${u.id}:${(u.lat || 0).toFixed(2)}:${(u.lng || 0).toFixed(2)}`)
+    .join("|");
+}
+
 // PUBLIC_INTERFACE
 export function MapProvider({ enabled, apiKey, children }) {
   /** Loads Google Maps script when enabled; otherwise renders children without external calls. */
@@ -116,23 +121,18 @@ export function MapProvider({ enabled, apiKey, children }) {
         { id: "google-map-script", googleMapsApiKey: "" }
   );
 
-  // If we're not enabled, we deliberately render children immediately.
   if (!enabled) return children({ isLoaded: false, loadError: null });
-
-  // If enabled but script can't load, fall back to mock (no external calls after error).
-  // Note: useJsApiLoader will have already attempted a network request; this is still safe,
-  // and keeps the app usable.
   return children({ isLoaded, loadError });
 }
 
-function GoogleMapView({ users }) {
+function GoogleMapView({ users, labelsById, fitSignal }) {
   // Keep a stable map instance so we can fit bounds / pan without re-creating.
   const mapRef = useRef(null);
 
-  // Fit bounds on mount and whenever user set changes.
-  useEffect(() => {
+  const fitToUsers = useCallback(() => {
     if (!mapRef.current) return;
     if (!window.google?.maps) return;
+
     if (!users.length) {
       mapRef.current.setCenter({ lat: 15, lng: 0 });
       mapRef.current.setZoom(2);
@@ -142,19 +142,25 @@ function GoogleMapView({ users }) {
     const bounds = new window.google.maps.LatLngBounds();
     for (const u of users) bounds.extend({ lat: u.lat, lng: u.lng });
 
-    // Padding keeps markers away from the edges at world zoom.
     mapRef.current.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
   }, [users]);
+
+  // Fit bounds on mount and whenever user set changes.
+  useEffect(() => {
+    fitToUsers();
+  }, [fitToUsers]);
+
+  // Fit-to-users control trigger.
+  useEffect(() => {
+    if (fitSignal > 0) fitToUsers();
+  }, [fitSignal, fitToUsers]);
 
   const mapOptions = useMemo(() => {
     return {
       disableDefaultUI: true,
       clickableIcons: false,
-      // Keep the look subdued so it matches the Ocean Professional theme.
-      styles: [
-        { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
-        { featureType: "transit", elementType: "labels", stylers: [{ visibility: "off" }] },
-      ],
+      // Requested: default, clean basemap => no custom styling; use standard roadmap.
+      mapTypeId: "roadmap",
     };
   }, []);
 
@@ -178,12 +184,13 @@ function GoogleMapView({ users }) {
         {users.map((u) => {
           const hex = statusToThemeColor((u.status || "primary").toLowerCase());
           const iconUrl = makeDotIconSvgHex(hex);
+          const area = labelsById[u.id] || "Unknown area";
 
           return (
             <MarkerF
               key={u.id}
               position={{ lat: u.lat, lng: u.lng }}
-              title={u.name}
+              title={`${u.name} • ${area}`}
               icon={{
                 url: iconUrl,
                 scaledSize: window.google?.maps ? new window.google.maps.Size(34, 34) : undefined,
@@ -194,9 +201,8 @@ function GoogleMapView({ users }) {
         })}
       </GoogleMap>
 
-      {/* Keep a subtle overlay consistent with the mock map affordances */}
       <div className="MapOverlayTop" aria-hidden="true">
-        <div className="MapOverlayChip">Google Map • Markers update in real-time</div>
+        <div className="MapOverlayChip">Google Map • World view • Markers update in real-time</div>
       </div>
     </div>
   );
@@ -208,13 +214,28 @@ export function MapContainer() {
   const { users, mode, mapMode } = useDashboard();
   const apiKey = getGoogleMapsKey();
 
-  // We keep a local "fit" center/zoom for the mock map so we can auto-frame the fleet
-  // on mount and when the user set changes.
+  // Local "fit" center/zoom for the mock map so we can auto-frame the fleet.
   const [fitView, setFitView] = useState(() => computeFitCenterZoom(users));
+  const [fitSignal, setFitSignal] = useState(0);
 
   useEffect(() => {
     setFitView(computeFitCenterZoom(users));
   }, [users]);
+
+  // Offline area labels (throttled).
+  const [labelsById, setLabelsById] = useState(() => ({}));
+  const labelKey = useMemo(() => computeLabelKey(users), [users]);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      const next = {};
+      for (const u of users) {
+        next[u.id] = getAreaLabel(u.lat, u.lng);
+      }
+      setLabelsById(next);
+    }, 750); // throttle to avoid excessive recalcs as markers drift
+    return () => window.clearTimeout(t);
+  }, [labelKey, users]);
 
   // Rendering rules:
   // - Demo forces mock, even if key exists.
@@ -231,13 +252,41 @@ export function MapContainer() {
       status: u.status,
       speed: u.speed,
       etaIso: u.etaIso,
+      areaLabel: labelsById[u.id] || "Unknown area",
     }));
+  }, [labelsById, users]);
+
+  const onFitToUsers = useCallback(() => {
+    // - For Mock: push center/zoom via props
+    // - For Google: toggle a signal observed by GoogleMapView (imperative fitBounds)
+    setFitView(computeFitCenterZoom(users));
+    setFitSignal((n) => n + 1);
   }, [users]);
 
   return (
-    <MapProvider enabled={googleEnabled} apiKey={apiKey}>
-      {({ isLoaded, loadError }) => {
-        if (googleEnabled && loadError) {
+    <div className="MapWrap" aria-label="Map wrapper">
+      <div className="MapTopControls" aria-label="Map controls">
+        <button type="button" className="Button" onClick={onFitToUsers} aria-label="Fit map to users">
+          Fit to users
+        </button>
+      </div>
+
+      <MapProvider enabled={googleEnabled} apiKey={apiKey}>
+        {({ isLoaded, loadError }) => {
+          if (googleEnabled && loadError) {
+            return (
+              <MockGoogleMap
+                center={fitView.center}
+                zoom={fitView.zoom}
+                markers={markers}
+                onMarkerClick={() => {}}
+              />
+            );
+          }
+          if (googleEnabled && isLoaded) {
+            return <GoogleMapView users={users} labelsById={labelsById} fitSignal={fitSignal} />;
+          }
+
           return (
             <MockGoogleMap
               center={fitView.center}
@@ -246,21 +295,8 @@ export function MapContainer() {
               onMarkerClick={() => {}}
             />
           );
-        }
-        if (googleEnabled && isLoaded) {
-          return <GoogleMapView users={users} />;
-        }
-
-        // Mock always available (no external calls).
-        return (
-          <MockGoogleMap
-            center={fitView.center}
-            zoom={fitView.zoom}
-            markers={markers}
-            onMarkerClick={() => {}}
-          />
-        );
-      }}
-    </MapProvider>
+        }}
+      </MapProvider>
+    </div>
   );
 }

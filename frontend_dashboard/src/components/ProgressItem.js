@@ -1,11 +1,13 @@
 import React, { useMemo } from "react";
 import { formatEta, formatPercent, formatSpeed, getInitials } from "../utils/format";
+import { getAreaLabelForUser } from "../utils/geoRegion";
 import { StatusBadge } from "./StatusBadge";
 
 // PUBLIC_INTERFACE
 export function ProgressItem({ user }) {
   /** Displays detailed route progress information for a single user. */
   const initials = useMemo(() => getInitials(user.name), [user.name]);
+  const areaLabel = useMemo(() => getAreaLabelForUser(user), [user?.lat, user?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
   const progressWidth = useMemo(() => {
     const pct = Math.max(0, Math.min(1, user.completion || 0)) * 100;
     return `${pct.toFixed(1)}%`;
@@ -22,6 +24,9 @@ export function ProgressItem({ user }) {
           <strong>{user.name}</strong>
           <span>
             {user.routeName || "Active Route"} • ETA {formatEta(user.etaIso)}
+          </span>
+          <span style={{ marginTop: 4 }}>
+            Area: <strong style={{ color: "var(--color-text)" }}>{areaLabel}</strong>
           </span>
         </div>
 

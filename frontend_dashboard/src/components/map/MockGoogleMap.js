@@ -596,7 +596,8 @@ export function MockGoogleMap({
           const m = c.items[0];
           const ringColor = statusToColorVar(m.status);
           const initials = getInitials(m.name);
-          const tooltipLabel = `${m.name} • ${formatSpeed(m.speed)} • ETA ${formatEta(m.etaIso)}`;
+          const area = m.areaLabel || "Unknown area";
+          const tooltipLabel = `${m.name} • ${area} • ${formatSpeed(m.speed)} • ETA ${formatEta(m.etaIso)}`;
 
           return (
             <button
@@ -609,7 +610,7 @@ export function MockGoogleMap({
                 ["--ringColor"]: ringColor,
                 ["--avatarBg"]: avatarGradientForId(m.id),
               }}
-              aria-label={`Map marker: ${m.name}. Status ${(m.status || "primary").toLowerCase()}.`}
+              aria-label={`Map marker: ${m.name}. Area ${area}. Status ${(m.status || "primary").toLowerCase()}.`}
               onClick={(e) => {
                 e.stopPropagation();
                 if (typeof onMarkerClick === "function") onMarkerClick(m);
@@ -630,6 +631,10 @@ export function MockGoogleMap({
               </span>
               <span className="MockMapMarkerTooltip" role="tooltip">
                 <span className="MockMapMarkerTooltipTitle">{m.name}</span>
+                <span className="MockMapMarkerTooltipRow">
+                  <span>Area</span>
+                  <strong>{area}</strong>
+                </span>
                 <span className="MockMapMarkerTooltipRow">
                   <span>Speed</span>
                   <strong>{formatSpeed(m.speed)}</strong>

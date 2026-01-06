@@ -309,6 +309,19 @@ body,
 }
 
 /* Map placeholder */
+.MapWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.MapTopControls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .MapViewport {
   position: relative;
   width: 100%;

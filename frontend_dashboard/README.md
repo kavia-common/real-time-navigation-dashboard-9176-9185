@@ -63,6 +63,16 @@ The mock renderer visually mimics a map canvas with:
 
 In Mock mode, the demo defaults to a **world map viewport** and seeds **globally distributed mock users** (across multiple regions). The map will auto-fit to include all current users.
 
+## Area labeling (offline, approximate)
+
+The UI shows an **Area** label for each user (in marker tooltips and the progress list). This is computed **offline** with a small, dependency-free lookup (`src/utils/geoRegion.js`):
+
+- If the user is near a built-in sample city, it shows **City, Country** (e.g., `Berlin, Germany`)
+- Otherwise it tries to infer a **Country** from coarse bounding boxes
+- Otherwise it falls back to a **continent/region** label
+
+No network calls are made for labels.
+
 ## Notes
 
 - The map is intentionally implemented as a swap-friendly placeholder component (`src/components/MapContainer.js`).
