@@ -9,14 +9,22 @@ export function DashboardLayout() {
   return (
     <>
       <main className="DashboardMain" aria-label="Navigation dashboard main content">
-        <section className="Panel" aria-label="Live map panel">
-          <div className="PanelHeader">
-            <div>
+        <section className="Panel LiveMapPanel" aria-label="Live map panel">
+          <div className="PanelHeader LiveMapHeader">
+            <div className="LiveMapHeaderLeft">
               <h2>Live Map</h2>
               <p>Multi-user markers with speed, ETA and completion</p>
             </div>
+
+            <div className="LiveMapHeaderRight" aria-label="Live map header actions">
+              {/* Visual-only placeholders for design parity; existing controls remain in the top navbar. */}
+              <span className="LiveMapChip" aria-hidden="true">
+                Live tracking
+              </span>
+            </div>
           </div>
-          <div className="PanelBody">
+
+          <div className="PanelBody LiveMapBody">
             <MapContainer />
           </div>
         </section>
