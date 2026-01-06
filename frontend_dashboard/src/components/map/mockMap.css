@@ -6,7 +6,7 @@
 .MockMapViewport {
   position: relative;
   width: 100%;
-  height: calc(100vh - 60px - (2 * var(--space-4)) - 8px);
+  height: 100%;
   min-height: 420px;
 
   border-radius: var(--radius-lg);
@@ -18,12 +18,6 @@
   box-shadow: var(--shadow-md);
   user-select: none;
   touch-action: none;
-}
-
-@media (max-width: 980px) {
-  .MockMapViewport {
-    height: 420px;
-  }
 }
 
 .MockMapViewport:focus-visible {

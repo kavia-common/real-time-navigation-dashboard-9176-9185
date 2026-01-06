@@ -168,7 +168,7 @@ function GoogleMapView({ users, labelsById, fitSignal }) {
   const initial = useMemo(() => computeFitCenterZoom(users), [users]);
 
   return (
-    <div className="MapViewport" role="region" aria-label="Google map">
+    <>
       <GoogleMap
         mapContainerStyle={{ width: "100%", height: "100%" }}
         center={initial.center}
@@ -204,7 +204,7 @@ function GoogleMapView({ users, labelsById, fitSignal }) {
       <div className="MapOverlayTop" aria-hidden="true">
         <div className="MapOverlayChip">Google Map • World view • Markers update in real-time</div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -218,9 +218,19 @@ export function MapContainer() {
   const [fitView, setFitView] = useState(() => computeFitCenterZoom(users));
   const [fitSignal, setFitSignal] = useState(0);
 
+  // Map UI state for better feedback when something goes wrong.
+  const [mapError, setMapError] = useState("");
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
     setFitView(computeFitCenterZoom(users));
   }, [users]);
+
+  // Mark as mounted after first paint so skeleton can appear briefly (helps detect layout issues).
+  useEffect(() => {
+    const t = window.setTimeout(() => setMounted(true), 80);
+    return () => window.clearTimeout(t);
+  }, []);
 
   // Offline area labels (throttled).
   const [labelsById, setLabelsById] = useState(() => ({}));
@@ -263,6 +273,23 @@ export function MapContainer() {
     setFitSignal((n) => n + 1);
   }, [users]);
 
+  const renderMock = useCallback(() => {
+    try {
+      return (
+        <MockGoogleMap
+          center={fitView.center}
+          zoom={fitView.zoom}
+          markers={markers}
+          onMarkerClick={() => {}}
+        />
+      );
+    } catch (e) {
+      // Extremely defensive: render error banner instead of blank panel.
+      setMapError("Mock map failed to render.");
+      return null;
+    }
+  }, [fitView.center, fitView.zoom, markers]);
+
   return (
     <div className="MapWrap" aria-label="Map wrapper">
       <div className="MapTopControls" aria-label="Map controls">
@@ -271,32 +298,56 @@ export function MapContainer() {
         </button>
       </div>
 
-      <MapProvider enabled={googleEnabled} apiKey={apiKey}>
-        {({ isLoaded, loadError }) => {
-          if (googleEnabled && loadError) {
-            return (
-              <MockGoogleMap
-                center={fitView.center}
-                zoom={fitView.zoom}
-                markers={markers}
-                onMarkerClick={() => {}}
-              />
-            );
-          }
-          if (googleEnabled && isLoaded) {
-            return <GoogleMapView users={users} labelsById={labelsById} fitSignal={fitSignal} />;
-          }
+      {/* Shared viewport wrapper ensures a guaranteed visible area and consistent overlay stacking */}
+      <div className="MapViewport" role="region" aria-label="Live map viewport">
+        {/* Skeleton: visible while Google script loads OR initial mount */}
+        {!mounted || (googleEnabled && !mapError) ? (
+          googleEnabled && mounted ? null : (
+            <div className="MapSkeleton" aria-hidden="true">
+              <div className="MapSkeletonInner">Loading map…</div>
+            </div>
+          )
+        ) : null}
 
-          return (
-            <MockGoogleMap
-              center={fitView.center}
-              zoom={fitView.zoom}
-              markers={markers}
-              onMarkerClick={() => {}}
-            />
-          );
-        }}
-      </MapProvider>
+        <MapProvider enabled={googleEnabled} apiKey={apiKey}>
+          {({ isLoaded, loadError }) => {
+            // If Google is requested but we hit a loader error, show a banner and fall back to mock.
+            if (googleEnabled && loadError) {
+              if (!mapError) setMapError("Google Maps failed to load. Falling back to the mock map.");
+              return renderMock();
+            }
+
+            // If Google enabled and loaded, render the actual Google map (and clear previous error if any).
+            if (googleEnabled && isLoaded) {
+              if (mapError) setMapError("");
+              try {
+                return <GoogleMapView users={users} labelsById={labelsById} fitSignal={fitSignal} />;
+              } catch (e) {
+                if (!mapError) setMapError("Google map failed to initialize. Falling back to the mock map.");
+                return renderMock();
+              }
+            }
+
+            // Default: mock map (world view by default).
+            if (mapError) setMapError("");
+            return renderMock();
+          }}
+        </MapProvider>
+
+        {mapError ? (
+          <div className="MapErrorBanner" role="status" aria-live="polite">
+            <div>
+              <strong>Map rendering issue</strong>
+              <span>{mapError}</span>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button type="button" className="Button" onClick={onFitToUsers} aria-label="Retry fit to users">
+                Retry
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
