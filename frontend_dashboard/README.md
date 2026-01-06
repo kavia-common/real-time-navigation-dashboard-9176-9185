@@ -1,82 +1,47 @@
-# Lightweight React Template for KAVIA
+# Real-time Navigation Dashboard (Frontend)
 
-This project provides a minimal React template with a clean, modern UI and minimal dependencies.
+A lightweight React dashboard UI for multi-user navigation and route progress tracking.
 
 ## Features
 
-- **Lightweight**: No heavy UI frameworks - uses only vanilla CSS and React
-- **Modern UI**: Clean, responsive design with KAVIA brand styling
-- **Fast**: Minimal dependencies for quick loading times
-- **Simple**: Easy to understand and modify
+- Top navigation bar with connection status and controls
+- Left panel: interactive **map placeholder** (no heavy map deps)
+  - Renders user markers based on lat/lng normalized to the viewport
+  - Keyboard accessible (focus map, arrow keys to pan; +/- to zoom)
+  - Markers show tooltip with speed, ETA, completion, status
+- Right panel: scrollable progress list
+  - Avatar/initials, route name, completion bar, ETA, speed, status pill
+  - Sorting and filtering (via top bar)
+- Real-time updates:
+  - **Live WebSocket** if `REACT_APP_WS_URL` is set
+  - Otherwise runs in **mock mode** with timers and drifting coordinates
 
-## Getting Started
+## Environment configuration (optional)
 
-In the project directory, you can run:
+The app runs without any env vars; it will seed mock users automatically.
 
-### `npm start`
+Set any of the following in `.env`:
 
-Runs the app in development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- `REACT_APP_WS_URL` — WebSocket URL for live updates.
+  - Expected message JSON shape:
+    ```json
+    { "id": "u1", "name": "Avery Kim", "lat": 37.78, "lng": -122.45, "speed": 4.2, "etaIso": "2026-01-06T12:30:00.000Z", "completion": 0.42, "status": "primary" }
+    ```
+  - `status` supports: `primary | secondary | success | error`
 
-### `npm test`
+- `REACT_APP_API_BASE` or `REACT_APP_BACKEND_URL` — Optional REST base URL to fetch initial users.
+  - Best-effort GET request to: `GET {base}/users`
+  - If unavailable, the UI falls back to mock users.
 
-Launches the test runner in interactive watch mode.
+## Switching between mock/live
 
-### `npm run build`
+Use the **Mode** toggle in the top bar:
+- Mode: Mock — local simulation
+- Mode: Live — connects to WebSocket (if configured)
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+Use **Refresh** to reconnect/restart updates.
 
-## Customization
+## Notes
 
-### Colors
-
-The main brand colors are defined as CSS variables in `src/App.css`:
-
-```css
-:root {
-  --kavia-orange: #E87A41;
-  --kavia-dark: #1A1A1A;
-  --text-color: #ffffff;
-  --text-secondary: rgba(255, 255, 255, 0.7);
-  --border-color: rgba(255, 255, 255, 0.1);
-}
-```
-
-### Components
-
-This template uses pure HTML/CSS components instead of a UI framework. You can find component styles in `src/App.css`. 
-
-Common components include:
-- Buttons (`.btn`, `.btn-large`)
-- Container (`.container`)
-- Navigation (`.navbar`)
-- Typography (`.title`, `.subtitle`, `.description`)
-
-## Learn More
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- The map is intentionally implemented as a swap-friendly placeholder component (`src/components/MapContainer.js`).
+  You can later replace it with Leaflet/MapLibre/etc. with minimal changes.
