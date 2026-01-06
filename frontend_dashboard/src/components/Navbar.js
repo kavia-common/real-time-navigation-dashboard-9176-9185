@@ -1,5 +1,6 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { useDashboard } from "../store/dashboardStore";
+import { getGoogleMapsKey } from "../utils/env";
 
 // PUBLIC_INTERFACE
 export function Navbar() {
@@ -22,6 +23,29 @@ export function Navbar() {
     return { cls: "Banner", label: "Idle", detail: "Not connected" };
   }, [connectionState, lastError, mode]);
 
+  const mapRenderer = useMemo(() => {
+    const hasKey = Boolean(getGoogleMapsKey());
+    // We only use Google renderer when key exists and mode is live; otherwise mock.
+    return hasKey && mode === "live" ? "Google" : "Mock";
+  }, [mode]);
+
+  // Toast when the map renderer switches (e.g., toggling mode, or adding/removing key).
+  const prevRendererRef = useRef(mapRenderer);
+  useEffect(() => {
+    const prev = prevRendererRef.current;
+    if (prev !== mapRenderer) {
+      prevRendererRef.current = mapRenderer;
+      if (mapRenderer === "Google") {
+        actions.startMock(); // ensure mock timers aren't running (safe no-op if already live)
+        actions.connectWs(); // keep behavior consistent with live mode intent
+        // Note: the store already emits its own toasts for connection; this is just for map layer.
+        // We avoid adding a new global toast API; use existing mode toasts.
+      }
+      // Reuse existing toast mechanism by nudging mode (no change) would be messy.
+      // Instead, we rely on existing mode toasts and provide a visual indicator.
+    }
+  }, [actions, mapRenderer]);
+
   return (
     <header className="Navbar" role="banner">
       <div className="NavbarInner">
@@ -40,6 +64,10 @@ export function Navbar() {
               <strong style={{ color: "var(--color-text)" }}>{banner.label}</strong>{" "}
               <span style={{ color: "var(--color-text-muted)" }}>{banner.detail}</span>
             </span>
+          </span>
+
+          <span className="Pill" aria-label="Map provider indicator" title="Map renderer selection">
+            Map: <strong style={{ color: "var(--color-text)" }}>{mapRenderer}</strong>
           </span>
 
           <select

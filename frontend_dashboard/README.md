@@ -33,6 +33,10 @@ Set any of the following in `.env`:
   - Best-effort GET request to: `GET {base}/users`
   - If unavailable, the UI falls back to mock users.
 
+- `REACT_APP_GOOGLE_MAPS_API_KEY` — Optional. If set (non-empty) **and** Mode is **Live**, the left panel renders an actual Google Map using `@react-google-maps/api`.
+  - If missing/empty (or Mode is Mock), the dashboard uses the built-in mock map renderer (no external calls).
+  - Do **not** hardcode keys in code. Put the key in `.env` for local dev.
+
 ## Switching between mock/live
 
 Use the **Mode** toggle in the top bar:
